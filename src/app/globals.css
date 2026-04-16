@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --cepe-green: #005F3B;
+  --cepe-beige: #C6A984;
+  --cepe-cream: #FFE5B4;
+  --cepe-grey: #ECECEC;
+}
+
+html, body { background: var(--cepe-grey); color: #111; }
+
+@layer components {
+  .btn        { @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium transition active:scale-[.98]; }
+  .btn-primary{ @apply btn bg-cepe-green text-white hover:bg-cepe-green-light; }
+  .btn-ghost  { @apply btn bg-white text-cepe-green border border-cepe-green hover:bg-cepe-cream; }
+  .btn-danger { @apply btn bg-red-600 text-white hover:bg-red-700; }
+  .card       { @apply bg-white rounded-xl shadow-sm border border-black/5 p-5; }
+  .input      { @apply w-full border border-black/15 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-cepe-green bg-white; }
+  .label      { @apply block text-sm font-medium text-black/70 mb-1; }
+  .chip       { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium; }
+  .chip-green { @apply chip bg-cepe-green/10 text-cepe-green; }
+  .chip-beige { @apply chip bg-cepe-beige/30 text-black/70; }
+  .kpi        { @apply card flex flex-col gap-1; }
+  .kpi-label  { @apply text-xs uppercase tracking-wide text-black/50; }
+  .kpi-value  { @apply text-3xl font-bold text-cepe-green; }
+}
+
+/* progress bar */
+.bar { @apply h-2 rounded-full bg-black/5 overflow-hidden; }
+.bar > span { @apply block h-full bg-cepe-green transition-all; }
