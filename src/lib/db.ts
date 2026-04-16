@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import bcrypt from 'bcryptjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -79,6 +80,29 @@ function init(d: Database.Database) {
   CREATE INDEX IF NOT EXISTS idx_apont_etapa  ON apontamentos(etapa);
   `);
   migrarOrdensServico(d);
+  seedInicial(d);
+}
+
+function seedInicial(d: Database.Database) {
+  const { n } = d.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number };
+  if (n > 0) return;
+  const users: [string, string, string, 'ADMIN' | 'GESTOR' | 'OPERADOR', string][] = [
+    ['Administrador',   'admin',  'admin123',   'ADMIN',    'PREPARACAO,CAPTURA,INSPECAO,INDEXACAO'],
+    ['Gestor CEPE',     'gestor', 'gestor123',  'GESTOR',   'PREPARACAO,CAPTURA,INSPECAO,INDEXACAO'],
+    ['Ana Preparadora', 'ana',    'ana123',     'OPERADOR', 'PREPARACAO'],
+    ['Bruno Scanner',   'bruno',  'bruno123',   'OPERADOR', 'CAPTURA'],
+    ['Carla Inspetora', 'carla',  'carla123',   'OPERADOR', 'INSPECAO'],
+    ['Diego Indexador', 'diego',  'diego123',   'OPERADOR', 'INDEXACAO'],
+  ];
+  const ins = d.prepare(
+    'INSERT INTO users (nome, matricula, senha_hash, perfil, etapas) VALUES (?,?,?,?,?)'
+  );
+  const tx = d.transaction(() => {
+    for (const [nome, matricula, senha, perfil, etapas] of users) {
+      ins.run(nome, matricula, bcrypt.hashSync(senha, 10), perfil, etapas);
+    }
+  });
+  tx();
 }
 
 function colunaExiste(d: Database.Database, tabela: string, coluna: string): boolean {

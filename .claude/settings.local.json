@@ -24,7 +24,8 @@
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); j=d['result']['data']['json']; print\\('SOURCE:', j.get\\('source'\\)\\); print\\('DOMAINS:', [x.get\\('host'\\) for x in j.get\\('domains',[]\\)]\\); print\\('---ENV---'\\); print\\(j.get\\('env',''\\)\\)\")",
       "Bash(python -c \"import sys,json; print\\(json.load\\(sys.stdin\\)['result']['data']['json'].get\\('env',''\\)\\)\" cat /tmp/env_custodia_before.txt)",
       "Bash(gh --version)",
-      "Bash(gh auth *)"
+      "Bash(gh auth *)",
+      "Bash(gh repo *)"
     ]
   }
 }
