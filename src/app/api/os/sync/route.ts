@@ -6,6 +6,6 @@ export async function POST() {
   const u = await getSession();
   if (!u || (u.perfil !== 'ADMIN' && u.perfil !== 'GESTOR'))
     return NextResponse.json({ erro: 'proibido' }, { status: 403 });
-  const r = sincronizarDoProtocolo();
+  const r = await sincronizarDoProtocolo();
   return NextResponse.json(r);
 }

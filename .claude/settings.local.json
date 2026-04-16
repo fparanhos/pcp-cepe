@@ -25,7 +25,9 @@
       "Bash(python -c \"import sys,json; print\\(json.load\\(sys.stdin\\)['result']['data']['json'].get\\('env',''\\)\\)\" cat /tmp/env_custodia_before.txt)",
       "Bash(gh --version)",
       "Bash(gh auth *)",
-      "Bash(gh repo *)"
+      "Bash(gh repo *)",
+      "Bash(python -)",
+      "Bash(node -e ' *)"
     ]
   }
 }

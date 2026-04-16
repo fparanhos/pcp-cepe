@@ -1,13 +1,11 @@
 /**
- * Bridge com o Sistema de Protocolo existente.
+ * Bridge com o Sistema de Protocolo (CEPE DOC custodia-next).
  *
- * Estratégia: lê DIRETAMENTE o banco do Protocolo (somente leitura) e gera
- * Ordens de Serviço no banco do PCP. Se PROTOCOLO_DB_PATH não estiver
- * configurado, usa um mock para permitir demo/desenvolvimento.
+ * Lê `protocolo_recebimento` via webservice (action listarRecebimentosPendentes)
+ * e gera Ordens de Serviço no banco local do PCP.
  *
- * Ajuste o nome da tabela e colunas conforme o esquema real do Protocolo.
+ * Se PROTOCOLO_MODO != 'api', usa mock para dev.
  */
-import Database from 'better-sqlite3';
 import { db, imagensPrevistas, caixasPorTipo } from './db';
 
 type EntradaProtocolo = {
@@ -17,27 +15,43 @@ type EntradaProtocolo = {
   qtd_caixas: number;
 };
 
-function lerProtocolo(): EntradaProtocolo[] {
-  const dbPath = process.env.PROTOCOLO_DB_PATH;
-  if (!dbPath) {
-    // Mock p/ demo
+const MODO  = process.env.PROTOCOLO_MODO    ?? 'stub';
+const WS    = process.env.CEPEDOC_WS_URL    ?? '';
+const LOGIN = process.env.CEPEDOC_WS_LOGIN  ?? '';
+const SENHA = process.env.CEPEDOC_WS_SENHA  ?? '';
+
+async function lerProtocolo(): Promise<EntradaProtocolo[]> {
+  if (MODO !== 'api') {
     return [
-      { protocolo: 'PRT-2026-00101', cliente: 'SEFAZ-PE',      descricao: 'Processos fiscais 2019', qtd_caixas: 1 },
-      { protocolo: 'PRT-2026-00102', cliente: 'Tribunal de Contas', descricao: 'Prestação de contas', qtd_caixas: 2 },
-      { protocolo: 'PRT-2026-00103', cliente: 'Secretaria de Educação', descricao: 'Históricos escolares', qtd_caixas: 3 },
-      { protocolo: 'PRT-2026-00104', cliente: 'SDS-PE',        descricao: 'Inquéritos 2020',        qtd_caixas: 2 },
-      { protocolo: 'PRT-2026-00105', cliente: 'Secretaria de Saúde', descricao: 'Prontuários arquivo morto', qtd_caixas: 4 },
+      { protocolo: 'PRT-2026-00101', cliente: 'SEFAZ-PE',              descricao: 'Processos fiscais 2019',     qtd_caixas: 1 },
+      { protocolo: 'PRT-2026-00102', cliente: 'Tribunal de Contas',    descricao: 'Prestação de contas',        qtd_caixas: 2 },
+      { protocolo: 'PRT-2026-00103', cliente: 'Secretaria de Educação', descricao: 'Históricos escolares',      qtd_caixas: 3 },
+      { protocolo: 'PRT-2026-00104', cliente: 'SDS-PE',                descricao: 'Inquéritos 2020',            qtd_caixas: 2 },
+      { protocolo: 'PRT-2026-00105', cliente: 'Secretaria de Saúde',   descricao: 'Prontuários arquivo morto',  qtd_caixas: 4 },
     ];
   }
-  const p = new Database(dbPath, { readonly: true, fileMustExist: true });
-  // ⚠️ Ajuste ao schema real do Protocolo:
-  const rows = p.prepare(`
-    SELECT numero_protocolo AS protocolo, cliente, descricao, qtd_caixas
-      FROM protocolos_entrada
-     WHERE status = 'RECEBIDO'
-  `).all() as EntradaProtocolo[];
-  p.close();
-  return rows;
+
+  try {
+    const r = await fetch(WS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'listarRecebimentosPendentes', login: LOGIN, senha: SENHA }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) {
+      console.error('[protocolo] falha ao ler recebimentos:', j.error || r.status);
+      return [];
+    }
+    return (j.data as any[]).map(row => ({
+      protocolo:  row.numero_recebimento,
+      cliente:    row.cliente ?? null,
+      descricao:  row.observacoes ?? null,
+      qtd_caixas: Number(row.qtd_caixas) || 1,
+    }));
+  } catch (e: any) {
+    console.error('[protocolo] erro de rede:', e.message);
+    return [];
+  }
 }
 
 function tipoPorCaixas(qtd: number): 'SIMPLES' | 'DUPLA' | 'PADRAO' {
@@ -46,7 +60,8 @@ function tipoPorCaixas(qtd: number): 'SIMPLES' | 'DUPLA' | 'PADRAO' {
   return 'SIMPLES';
 }
 
-export function sincronizarDoProtocolo(): { criadas: number; ignoradas: number } {
+export async function sincronizarDoProtocolo(): Promise<{ criadas: number; ignoradas: number }> {
+  const entradas = await lerProtocolo();
   const d = db();
   const existe = d.prepare('SELECT 1 FROM ordens_servico WHERE protocolo_ref = ?');
   const insOS = d.prepare(`
@@ -58,8 +73,8 @@ export function sincronizarDoProtocolo(): { criadas: number; ignoradas: number }
   let seq = countOS.n + 1;
   let criadas = 0, ignoradas = 0;
 
-  const tx = d.transaction((entradas: EntradaProtocolo[]) => {
-    for (const e of entradas) {
+  const tx = d.transaction((rows: EntradaProtocolo[]) => {
+    for (const e of rows) {
       if (existe.get(e.protocolo)) { ignoradas++; continue; }
       const qtd = Math.max(1, e.qtd_caixas || 1);
       const tipo = tipoPorCaixas(qtd);
@@ -74,6 +89,6 @@ export function sincronizarDoProtocolo(): { criadas: number; ignoradas: number }
       criadas++;
     }
   });
-  tx(lerProtocolo());
+  tx(entradas);
   return { criadas, ignoradas };
 }
