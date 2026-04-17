@@ -27,7 +27,7 @@ export default function LoginPage() {
     <main className="min-h-screen grid place-items-center p-6 bg-cepe-grey">
       <form onSubmit={submit} className="card w-full max-w-sm">
         <div className="flex items-center gap-3 mb-6">
-          <Logo size={48} />
+          <Logo size={96} />
           <div>
             <div className="font-normal tracking-wide text-cepe-green text-lg leading-none">PCP Cepe</div>
             <div className="text-xs text-black/60">Digitalização de Documentos</div>

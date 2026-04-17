@@ -26,7 +26,7 @@ export function Shell({ user, children }: { user: U; children: React.ReactNode }
     <div className="min-h-screen flex flex-col">
       <header className="bg-cepe-green text-white">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-          <Logo size={34} mono />
+          <Logo size={68} mono />
           <div className="leading-tight">
             <div className="font-normal tracking-wide">PCP Cepe</div>
             <div className="text-[11px] opacity-80">Digitalização</div>
