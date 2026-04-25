@@ -1,4 +1,4 @@
-import { db } from './db';
+import { db, statusAptosParaEtapa } from './db';
 
 export type Etapa = 'PREPARACAO' | 'CAPTURA' | 'INSPECAO' | 'INDEXACAO';
 
@@ -12,7 +12,33 @@ export function listarOSAtivas() {
 }
 
 export function listarCaixas(osId: number) {
-  return db().prepare(`SELECT id, codigo, imagens_previstas FROM caixas WHERE os_id=? ORDER BY codigo`).all(osId) as any[];
+  return db().prepare(`
+    SELECT id, codigo, id_objeto, status, imagens_previstas
+      FROM caixas WHERE os_id=? ORDER BY id
+  `).all(osId) as any[];
+}
+
+export function listarCaixasParaEtapa(osId: number, etapa: Etapa) {
+  const aptos = statusAptosParaEtapa(etapa);
+  const placeholders = aptos.map(() => '?').join(',');
+  return db().prepare(`
+    SELECT id, codigo, id_objeto, status, imagens_previstas
+      FROM caixas
+     WHERE os_id=? AND status IN (${placeholders})
+     ORDER BY id
+  `).all(osId, ...aptos) as any[];
+}
+
+/** Lista OSs que têm pelo menos uma caixa apta para a etapa. */
+export function listarOSComCaixasNaEtapa(etapa: Etapa) {
+  const aptos = statusAptosParaEtapa(etapa);
+  const placeholders = aptos.map(() => '?').join(',');
+  return db().prepare(`
+    SELECT o.id, o.numero, o.cliente, o.tipo, o.qtd_caixas, o.imagens_previstas, o.status, o.protocolo_ref, o.criado_em
+      FROM ordens_servico o
+     WHERE EXISTS (SELECT 1 FROM caixas c WHERE c.os_id=o.id AND c.status IN (${placeholders}))
+     ORDER BY o.criado_em DESC
+  `).all(...aptos) as any[];
 }
 
 export function totalPorEtapa(osId: number) {
