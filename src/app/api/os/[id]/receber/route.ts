@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { db, imagensPrevistas, caixasPorTipo, TipoCaixa } from '@/lib/db';
+import { db, imagensPrevistas, TipoCaixa } from '@/lib/db';
 import { registrarMovimento } from '@/lib/protocoloApi';
 
 type Body = {
@@ -39,40 +39,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const novoStatus = body.acao === 'confirmar' ? 'ABERTA' : 'RECEBIDA_PENDENTE';
   const prev = imagensPrevistas(body.tipo);
-  const caixasEsperadas = caixasPorTipo(body.tipo);
 
-  const tx = d.transaction(() => {
-    d.prepare(`
-      UPDATE ordens_servico
-         SET tipo = ?, tipo_documento = ?, qtd_conferida = ?, qtd_caixas = ?,
-             imagens_previstas = ?, divergencia = ?, status = ?,
-             conferido_por = ?, conferido_em = datetime('now')
-       WHERE id = ?
-    `).run(
-      body.tipo,
-      body.tipo_documento ?? null,
-      qtd,
-      qtd,
-      prev,
-      body.divergencia ?? null,
-      novoStatus,
-      u.id,
-      osId
-    );
-
-    if (body.acao === 'confirmar') {
-      const atuais = d.prepare(`SELECT COUNT(*) AS n FROM caixas WHERE os_id = ?`).get(osId) as { n: number };
-      if (atuais.n !== qtd) {
-        d.prepare(`DELETE FROM caixas WHERE os_id = ?`).run(osId);
-        const ins = d.prepare(`INSERT INTO caixas (os_id, codigo, protocolo_ref, imagens_previstas) VALUES (?,?,?,?)`);
-        const ref = d.prepare(`SELECT protocolo_ref FROM ordens_servico WHERE id = ?`).get(osId) as { protocolo_ref: string | null };
-        for (let i = 1; i <= qtd; i++) {
-          ins.run(osId, `CX-${String(i).padStart(2, '0')}`, ref.protocolo_ref, prev / Math.max(1, caixasEsperadas));
-        }
-      }
-    }
-  });
-  tx();
+  d.prepare(`
+    UPDATE ordens_servico
+       SET tipo = ?, tipo_documento = ?, qtd_conferida = ?,
+           imagens_previstas = ?, divergencia = ?, status = ?,
+           conferido_por = ?, conferido_em = datetime('now')
+     WHERE id = ?
+  `).run(
+    body.tipo,
+    body.tipo_documento ?? null,
+    qtd,
+    prev,
+    body.divergencia ?? null,
+    novoStatus,
+    u.id,
+    osId
+  );
 
   const osAtual = d.prepare(`
     SELECT numero, cliente, protocolo_ref, tipo_documento, qtd_documentada, qtd_conferida, divergencia

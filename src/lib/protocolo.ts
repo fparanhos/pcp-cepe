@@ -6,13 +6,19 @@
  *
  * Se PROTOCOLO_MODO != 'api', usa mock para dev.
  */
-import { db, imagensPrevistas, caixasPorTipo } from './db';
+import { db, imagensPrevistas } from './db';
+
+type CaixaProtocolo = {
+  id_objeto: number | null;
+  codigo_caixa: string | null;
+};
 
 type EntradaProtocolo = {
   protocolo: string;
   cliente: string | null;
   descricao: string | null;
   qtd_caixas: number;
+  caixas: CaixaProtocolo[];
 };
 
 const MODO  = process.env.PROTOCOLO_MODO    ?? 'stub';
@@ -22,12 +28,14 @@ const SENHA = process.env.CEPEDOC_WS_SENHA  ?? '';
 
 async function lerProtocolo(): Promise<EntradaProtocolo[]> {
   if (MODO !== 'api') {
+    const mock = (n: number): CaixaProtocolo[] =>
+      Array.from({ length: n }, (_, i) => ({ id_objeto: null, codigo_caixa: `CX-${String(i + 1).padStart(2, '0')}` }));
     return [
-      { protocolo: 'PRT-2026-00101', cliente: 'SEFAZ-PE',              descricao: 'Processos fiscais 2019',     qtd_caixas: 1 },
-      { protocolo: 'PRT-2026-00102', cliente: 'Tribunal de Contas',    descricao: 'Prestação de contas',        qtd_caixas: 2 },
-      { protocolo: 'PRT-2026-00103', cliente: 'Secretaria de Educação', descricao: 'Históricos escolares',      qtd_caixas: 3 },
-      { protocolo: 'PRT-2026-00104', cliente: 'SDS-PE',                descricao: 'Inquéritos 2020',            qtd_caixas: 2 },
-      { protocolo: 'PRT-2026-00105', cliente: 'Secretaria de Saúde',   descricao: 'Prontuários arquivo morto',  qtd_caixas: 4 },
+      { protocolo: 'PRT-2026-00101', cliente: 'SEFAZ-PE',              descricao: 'Processos fiscais 2019',     qtd_caixas: 1, caixas: mock(1) },
+      { protocolo: 'PRT-2026-00102', cliente: 'Tribunal de Contas',    descricao: 'Prestação de contas',        qtd_caixas: 2, caixas: mock(2) },
+      { protocolo: 'PRT-2026-00103', cliente: 'Secretaria de Educação', descricao: 'Históricos escolares',      qtd_caixas: 3, caixas: mock(3) },
+      { protocolo: 'PRT-2026-00104', cliente: 'SDS-PE',                descricao: 'Inquéritos 2020',            qtd_caixas: 2, caixas: mock(2) },
+      { protocolo: 'PRT-2026-00105', cliente: 'Secretaria de Saúde',   descricao: 'Prontuários arquivo morto',  qtd_caixas: 4, caixas: mock(4) },
     ];
   }
 
@@ -47,6 +55,12 @@ async function lerProtocolo(): Promise<EntradaProtocolo[]> {
       cliente:    row.cliente ?? null,
       descricao:  row.observacoes ?? null,
       qtd_caixas: Number(row.qtd_caixas) || 1,
+      caixas: Array.isArray(row.caixas)
+        ? row.caixas.map((c: any) => ({
+            id_objeto:    c.id_objeto != null ? Number(c.id_objeto) : null,
+            codigo_caixa: c.codigo_caixa ?? null,
+          }))
+        : [],
     }));
   } catch (e: any) {
     console.error('[protocolo] erro de rede:', e.message);
@@ -68,7 +82,10 @@ export async function sincronizarDoProtocolo(): Promise<{ criadas: number; ignor
     INSERT INTO ordens_servico (numero, cliente, descricao, tipo, qtd_caixas, qtd_documentada, imagens_previstas, status, protocolo_ref)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'RECEBIDA_PENDENTE', ?)
   `);
-  const insCaixa = d.prepare(`INSERT INTO caixas (os_id, codigo, protocolo_ref, imagens_previstas) VALUES (?, ?, ?, 800)`);
+  const insCaixa = d.prepare(`
+    INSERT INTO caixas (os_id, codigo, id_objeto, protocolo_ref, imagens_previstas, status)
+    VALUES (?, ?, ?, ?, 800, 'AGUARDANDO_PREPARACAO')
+  `);
   const countOS = d.prepare(`SELECT COUNT(*) AS n FROM ordens_servico`).get() as { n: number };
   let seq = countOS.n + 1;
   let criadas = 0, ignoradas = 0;
@@ -79,12 +96,15 @@ export async function sincronizarDoProtocolo(): Promise<{ criadas: number; ignor
       const qtd = Math.max(1, e.qtd_caixas || 1);
       const tipo = tipoPorCaixas(qtd);
       const prev = imagensPrevistas(tipo);
-      const caixas = caixasPorTipo(tipo);
       const numero = `OS-${new Date().getFullYear()}-${String(seq++).padStart(5, '0')}`;
-      const res = insOS.run(numero, e.cliente, e.descricao, tipo, caixas, qtd, prev, e.protocolo);
+      const res = insOS.run(numero, e.cliente, e.descricao, tipo, qtd, qtd, prev, e.protocolo);
       const osId = Number(res.lastInsertRowid);
-      for (let i = 1; i <= caixas; i++) {
-        insCaixa.run(osId, `CX-${String(i).padStart(2, '0')}`, e.protocolo);
+      const lista = e.caixas.length
+        ? e.caixas
+        : Array.from({ length: qtd }, (_, i) => ({ id_objeto: null, codigo_caixa: `CX-${String(i + 1).padStart(2, '0')}` }));
+      for (const c of lista) {
+        const codigo = c.id_objeto != null ? String(c.id_objeto) : (c.codigo_caixa || `CX-${String(osId).padStart(2, '0')}`);
+        insCaixa.run(osId, codigo, c.id_objeto, e.protocolo);
       }
       criadas++;
     }

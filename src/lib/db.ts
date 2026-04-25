@@ -54,8 +54,10 @@ function init(d: Database.Database) {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     os_id INTEGER NOT NULL REFERENCES ordens_servico(id) ON DELETE CASCADE,
     codigo TEXT NOT NULL,
+    id_objeto INTEGER,
     protocolo_ref TEXT,
     imagens_previstas INTEGER NOT NULL DEFAULT 800,
+    status TEXT NOT NULL DEFAULT 'AGUARDANDO_PREPARACAO',
     UNIQUE(os_id, codigo)
   );
 
@@ -80,7 +82,16 @@ function init(d: Database.Database) {
   CREATE INDEX IF NOT EXISTS idx_apont_etapa  ON apontamentos(etapa);
   `);
   migrarOrdensServico(d);
+  migrarCaixas(d);
   seedInicial(d);
+}
+
+function migrarCaixas(d: Database.Database) {
+  const addCol = (nome: string, ddl: string) => {
+    if (!colunaExiste(d, 'caixas', nome)) d.exec(`ALTER TABLE caixas ADD COLUMN ${ddl}`);
+  };
+  addCol('id_objeto', 'id_objeto INTEGER');
+  addCol('status',    "status TEXT NOT NULL DEFAULT 'AGUARDANDO_PREPARACAO'");
 }
 
 function seedInicial(d: Database.Database) {
@@ -166,6 +177,39 @@ function migrarOrdensServico(d: Database.Database) {
 
 export const IMG_POR_CAIXA = 800;
 export type TipoCaixa = 'SIMPLES' | 'DUPLA' | 'PADRAO';
+
+export type StatusCaixa =
+  | 'AGUARDANDO_PREPARACAO' | 'EM_PREPARACAO'
+  | 'AGUARDANDO_CAPTURA'    | 'EM_CAPTURA'
+  | 'AGUARDANDO_INSPECAO'   | 'EM_INSPECAO'
+  | 'AGUARDANDO_INDEXACAO'  | 'EM_INDEXACAO'
+  | 'CONCLUIDA';
+
+export type Etapa = 'PREPARACAO' | 'CAPTURA' | 'INSPECAO' | 'INDEXACAO';
+
+/** Status em que uma caixa pode receber apontamentos da etapa. */
+export function statusAptosParaEtapa(etapa: Etapa): StatusCaixa[] {
+  switch (etapa) {
+    case 'PREPARACAO': return ['AGUARDANDO_PREPARACAO', 'EM_PREPARACAO'];
+    case 'CAPTURA':    return ['AGUARDANDO_CAPTURA',    'EM_CAPTURA'];
+    case 'INSPECAO':   return ['AGUARDANDO_INSPECAO',   'EM_INSPECAO'];
+    case 'INDEXACAO':  return ['AGUARDANDO_INDEXACAO',  'EM_INDEXACAO'];
+  }
+}
+
+export function statusEmAndamento(etapa: Etapa): StatusCaixa {
+  return `EM_${etapa}` as StatusCaixa;
+}
+
+export function proximoStatusApos(etapa: Etapa): StatusCaixa {
+  switch (etapa) {
+    case 'PREPARACAO': return 'AGUARDANDO_CAPTURA';
+    case 'CAPTURA':    return 'AGUARDANDO_INSPECAO';
+    case 'INSPECAO':   return 'AGUARDANDO_INDEXACAO';
+    case 'INDEXACAO':  return 'CONCLUIDA';
+  }
+}
+
 export function imagensPrevistas(tipo: TipoCaixa): number {
   return tipo === 'PADRAO' ? 2400 : tipo === 'DUPLA' ? 1600 : 800;
 }
