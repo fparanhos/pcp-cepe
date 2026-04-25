@@ -26,6 +26,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   `).get(osId) as any;
   if (!os) return NextResponse.json({ erro: 'OS não encontrada' }, { status: 404 });
 
+  const pendentes = d.prepare(
+    `SELECT COUNT(*) AS n FROM caixas WHERE os_id = ? AND status <> 'CONCLUIDA'`
+  ).get(osId) as { n: number };
+  if (pendentes.n > 0) {
+    return NextResponse.json({
+      erro: 'caixas_pendentes',
+      mensagem: `Ainda há ${pendentes.n} caixa(s) sem concluir todas as fases.`,
+    }, { status: 400 });
+  }
+
   const imagens = (d.prepare(`
     SELECT COALESCE(SUM(quantidade),0) AS n FROM apontamentos WHERE os_id = ? AND etapa = 'INDEXACAO'
   `).get(osId) as { n: number }).n;

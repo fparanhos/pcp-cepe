@@ -29,6 +29,22 @@ export function listarCaixasParaEtapa(osId: number, etapa: Etapa) {
   `).all(osId, ...aptos) as any[];
 }
 
+/** Quantas caixas há em cada status (consolidado por fase) na OS. */
+export function caixasPorFase(osId: number) {
+  const rows = db().prepare(
+    `SELECT status, COUNT(*) AS n FROM caixas WHERE os_id=? GROUP BY status`
+  ).all(osId) as { status: string; n: number }[];
+  const out = { PREPARACAO: 0, CAPTURA: 0, INSPECAO: 0, INDEXACAO: 0, CONCLUIDA: 0 };
+  for (const r of rows) {
+    if (r.status === 'CONCLUIDA') out.CONCLUIDA += r.n;
+    else if (r.status.endsWith('_PREPARACAO')) out.PREPARACAO += r.n;
+    else if (r.status.endsWith('_CAPTURA'))    out.CAPTURA    += r.n;
+    else if (r.status.endsWith('_INSPECAO'))   out.INSPECAO   += r.n;
+    else if (r.status.endsWith('_INDEXACAO'))  out.INDEXACAO  += r.n;
+  }
+  return out;
+}
+
 /** Lista OSs que têm pelo menos uma caixa apta para a etapa. */
 export function listarOSComCaixasNaEtapa(etapa: Etapa) {
   const aptos = statusAptosParaEtapa(etapa);

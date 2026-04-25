@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { getSession } from '@/lib/auth';
-import { listarOSAtivas, totalPorEtapa } from '@/lib/metrics';
-import { rotuloTipo } from '@/lib/db';
+import { listarOSAtivas, totalPorEtapa, caixasPorFase } from '@/lib/metrics';
 
 const CARDS = [
   { href: '/preparacao', etapa: 'PREPARACAO', label: 'Preparação', dica: 'Separar conjuntos e carimbar capas' },
@@ -51,27 +50,47 @@ export default async function Home() {
         <div className="overflow-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-black/60">
-              <tr><th className="py-2">OS</th><th>Cliente</th><th>Tipo</th><th>Caixas</th><th>Previsto</th><th>Protocolo</th><th>Status</th></tr>
+              <tr>
+                <th className="py-2">OS</th><th>Cliente</th><th>Caixas por fase</th>
+                <th>Protocolo</th><th>Previsto</th>
+              </tr>
             </thead>
             <tbody>
-              {oss.map(o => (
-                <tr key={o.id} className="border-t border-black/5">
-                  <td className="py-2 font-semibold">{o.numero}</td>
-                  <td>{o.cliente}</td>
-                  <td><span className="chip-beige">{rotuloTipo(o.tipo)}</span></td>
-                  <td>{o.qtd_caixas}</td>
-                  <td>{o.imagens_previstas}</td>
-                  <td className="text-black/60">{o.protocolo_ref}</td>
-                  <td><span className="chip-green">{o.status}</span></td>
-                </tr>
-              ))}
-              {oss.length === 0 && <tr><td colSpan={7} className="py-6 text-center text-black/50">Nenhuma OS ativa. Gestor pode sincronizar do Protocolo.</td></tr>}
+              {oss.map(o => {
+                const fases = caixasPorFase(o.id);
+                return (
+                  <tr key={o.id} className="border-t border-black/5">
+                    <td className="py-2 font-semibold">{o.numero}</td>
+                    <td>{o.cliente}</td>
+                    <td>
+                      <div className="flex gap-1 flex-wrap">
+                        <FaseChip label="Prep"  n={fases.PREPARACAO} />
+                        <FaseChip label="Cap"   n={fases.CAPTURA} />
+                        <FaseChip label="Insp"  n={fases.INSPECAO} />
+                        <FaseChip label="Idx"   n={fases.INDEXACAO} />
+                        <FaseChip label="OK"    n={fases.CONCLUIDA} done />
+                      </div>
+                    </td>
+                    <td className="text-black/60">{o.protocolo_ref}</td>
+                    <td>{o.imagens_previstas}</td>
+                  </tr>
+                );
+              })}
+              {oss.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-black/50">Nenhuma OS ativa. Gestor pode sincronizar do Protocolo.</td></tr>}
             </tbody>
           </table>
         </div>
       </section>
     </div>
   );
+}
+
+function FaseChip({ label, n, done = false }: { label: string; n: number; done?: boolean }) {
+  if (n === 0) return <span className="text-xs text-black/30 px-2 py-0.5">{label}·0</span>;
+  const cls = done
+    ? 'bg-cepe-green text-white'
+    : 'bg-cepe-cream/80 text-black/80';
+  return <span className={`text-xs px-2 py-0.5 rounded ${cls}`}>{label}·{n}</span>;
 }
 
 function Kpi({ label, value }: { label: string; value: number }) {
